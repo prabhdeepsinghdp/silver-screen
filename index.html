@@ -294,6 +294,11 @@
         <input class="form-input" type="text" id="filmLink" placeholder="Paste your OneDrive shareable link">
         <div class="onedrive-hint">OneDrive → right-click file → Share → Copy link → set to "Anyone with the link can view"</div>
       </div>
+      <div class="form-row">
+        <label class="form-label">Subtitle file link (optional)</label>
+        <input class="form-input" type="text" id="filmSubtitle" placeholder="OneDrive link to .srt or .vtt file">
+        <div class="onedrive-hint">Same process — share the subtitle file and paste the link here. Both .srt and .vtt are supported.</div>
+      </div>
       <div class="form-row"><label class="form-label">Poster (auto-filled from TMDB)</label><input class="form-input" type="text" id="filmPoster" placeholder="https://…"></div>
     </div>
     <div id="seriesForm" style="display:none">
@@ -661,6 +666,7 @@ function selectTitle(id) {
         <div class="fact"><div class="fact-label">Country</div><div class="fact-value">${esc(item.country||'—')}</div></div>
         <div class="fact"><div class="fact-label">Runtime</div><div class="fact-value">${item.runtime?item.runtime+' min':'—'}</div></div>
         <div class="fact"><div class="fact-label">DOP</div><div class="fact-value">${esc(item.dop||'—')}</div></div>
+        <div class="fact"><div class="fact-label">Subtitles</div><div class="fact-value" style="color:${item.subtitle?'var(--amber)':'var(--text-muted)'}">${item.subtitle?'Linked':'—'}</div></div>
       </div>
       <div class="detail-synopsis">${esc(item.synopsis||'')}</div>
       ${episodes}
@@ -688,21 +694,37 @@ function renderEpList(item) {
 function playFilm(id) {
   const item = db.films.find(i=>i.id===id);
   if (!item?.link) { alert('No video link added yet.'); return; }
-  openPlayer(item.link, item.title);
+  openPlayer(item.link, item.title, item.subtitle);
 }
 
 function playEpisode(id,si,ei) {
   const item = db.series.find(i=>i.id===id);
   const ep = item?.seasons?.[si]?.episodes?.[ei];
   if (!ep?.link) { alert('No video link added yet.'); return; }
-  openPlayer(ep.link, `${item.title} · S${si+1}E${ei+1} · ${ep.title||''}`);
+  openPlayer(ep.link, `${item.title} · S${si+1}E${ei+1} · ${ep.title||\'\'}`, ep.subtitle);
 }
 
-function openPlayer(link, title) {
-  let src = link;
+function odLink(link) {
+  if (!link) return '';
   if ((link.includes('1drv.ms')||link.includes('onedrive.live.com')||link.includes('sharepoint.com')) && !link.includes('download=1'))
-    src = link + (link.includes('?')?'&':'?') + 'download=1';
-  document.getElementById('mainVideo').src = src;
+    return link + (link.includes('?')?'&':'?') + 'download=1';
+  return link;
+}
+
+function openPlayer(link, title, subtitle) {
+  const video = document.getElementById('mainVideo');
+  video.src = odLink(link);
+  // Remove any existing tracks
+  while (video.firstChild) video.removeChild(video.firstChild);
+  if (subtitle) {
+    const track = document.createElement('track');
+    track.kind = 'subtitles';
+    track.label = 'Subtitles';
+    track.default = true;
+    // For .srt we need a proxy or vtt — try direct link first
+    track.src = odLink(subtitle);
+    video.appendChild(track);
+  }
   document.getElementById('playerTitleBar').textContent = title;
   document.getElementById('playerOverlay').classList.add('visible');
 }
@@ -768,7 +790,7 @@ function openEditPanel(id) {
 function closeAddPanel() { document.getElementById('addPanel').classList.remove('visible'); editingId=null; }
 
 function clearForms() {
-  ['filmTitle','filmDirector','filmYear','filmCountry','filmRuntime','filmDOP','filmSynopsis','filmLink','filmPoster',
+  ['filmTitle','filmDirector','filmYear','filmCountry','filmRuntime','filmDOP','filmSynopsis','filmLink','filmSubtitle','filmPoster',
    'seriesTitle','seriesDirector','seriesYear','seriesCountry','seriesDOP','seriesSynopsis','seriesPoster']
     .forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
   document.getElementById('fetchStatus').textContent='';
@@ -824,7 +846,7 @@ function addSeason() {
 function addEpToSeason(si) {
   const c=document.getElementById(`episodes-${si}`); if(!c) return null;
   const ei=c.children.length+1, div=document.createElement('div'); div.className='ep-entry';
-  div.innerHTML=`<input class="form-input" type="text" placeholder="Ep ${ei} title" data-type="ep-title" data-si="${si}" style="flex:2"><input class="form-input" type="text" placeholder="OneDrive link" data-type="ep-link" data-si="${si}" style="flex:3"><input class="form-input" type="text" placeholder="e.g. 52m" data-type="ep-dur" data-si="${si}" style="width:70px;flex:none"><button class="ep-remove" onclick="this.parentElement.remove()">×</button>`;
+  div.innerHTML=`<input class="form-input" type="text" placeholder="Ep ${ei} title" data-type="ep-title" data-si="${si}" style="flex:2"><input class="form-input" type="text" placeholder="Video link" data-type="ep-link" data-si="${si}" style="flex:3"><input class="form-input" type="text" placeholder="Subtitle link" data-type="ep-sub" data-si="${si}" style="flex:3"><input class="form-input" type="text" placeholder="e.g. 52m" data-type="ep-dur" data-si="${si}" style="width:70px;flex:none"><button class="ep-remove" onclick="this.parentElement.remove()">×</button>`;
   c.appendChild(div); return div;
 }
 
@@ -837,7 +859,8 @@ function collectSeasons() {
       const t=row.querySelector('[data-type="ep-title"]').value.trim();
       const l=row.querySelector('[data-type="ep-link"]').value.trim();
       const d=row.querySelector('[data-type="ep-dur"]').value.trim();
-      if(t||l) episodes.push({title:t,link:l,duration:d});
+      const sub=row.querySelector('[data-type="ep-sub"]')?.value.trim()||'';
+      if(t||l) episodes.push({title:t,link:l,subtitle:sub,duration:d});
     });
     seasons.push({episodes});
   }
@@ -857,6 +880,7 @@ function saveFilm() {
     dop:document.getElementById('filmDOP').value.trim(),
     synopsis:document.getElementById('filmSynopsis').value.trim(),
     link:document.getElementById('filmLink').value.trim(),
+    subtitle:document.getElementById('filmSubtitle').value.trim(),
     poster:document.getElementById('filmPoster').value.trim(),
   };
   if(editingId){const i=db.films.findIndex(f=>f.id===editingId);if(i!==-1)db.films[i]=film;}
