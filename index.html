@@ -146,6 +146,10 @@
   .player-close { position:absolute; top:20px; right:24px; background:none; border:none; color:#888; font-size:28px; cursor:pointer; transition:color 0.2s; }
   .player-close:hover { color:#fff; }
   .player-title-bar { position:absolute; top:20px; left:24px; font-family:var(--font-display); font-style:italic; font-size:16px; color:#666; }
+  .player-cc-btn { position:absolute; bottom:72px; right:24px; background:none; border:1.5px solid #555; border-radius:4px; color:#888; font-family:var(--font-body); font-size:11px; font-weight:500; letter-spacing:0.08em; padding:5px 10px; cursor:pointer; transition:all 0.2s; }
+  .player-cc-btn.active { border-color:var(--amber); color:var(--amber); }
+  .player-cc-btn:hover { border-color:#aaa; color:#fff; }
+  .player-cc-btn.hidden-btn { display:none; }
   video { width:90vw; max-height:80vh; border-radius:4px; outline:none; }
 
   .add-panel { position:fixed; inset:0; background:rgba(0,0,0,0.75); z-index:150; display:none; align-items:center; justify-content:center; }
@@ -290,6 +294,7 @@
     video { width: 100vw; max-height: 100vh; border-radius: 0; }
     .player-close { top: 12px; right: 12px; font-size: 22px; }
     .player-title-bar { top: 12px; left: 12px; font-size: 13px; }
+    .player-cc-btn { bottom: 80px; right: 12px; }
   }
 </style>
 </head>
@@ -450,6 +455,7 @@
   <button class="player-close" onclick="closePlayer()">✕</button>
   <div class="player-title-bar" id="playerTitleBar"></div>
   <video id="mainVideo" controls autoplay></video>
+  <button class="player-cc-btn hidden-btn" id="ccBtn" onclick="toggleCC()">CC</button>
 </div>
 
 <script>
@@ -842,6 +848,10 @@ async function openPlayer(link, title, subtitle) {
   video.src = '';
   while (video.firstChild) video.removeChild(video.firstChild);
 
+  const ccBtn = document.getElementById('ccBtn');
+  ccBtn.classList.add('hidden-btn');
+  ccBtn.classList.remove('active');
+
   try {
     const token = localStorage.getItem('ss_token');
     const encoded = btoa(link).replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_');
@@ -855,7 +865,8 @@ async function openPlayer(link, title, subtitle) {
       const track = document.createElement('track');
       track.kind = 'subtitles';
       track.label = 'Subtitles';
-      track.default = true;
+      track.default = false;
+      track.mode = 'hidden';
       const subEncoded = btoa(subtitle).replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_');
       const subR = await fetch(`https://graph.microsoft.com/v1.0/shares/u!${subEncoded}/driveItem`, {
         headers: { Authorization: `Bearer ${token}` }
@@ -863,6 +874,8 @@ async function openPlayer(link, title, subtitle) {
       const subData = await subR.json();
       track.src = subData['@microsoft.graph.downloadUrl'] || subtitle;
       video.appendChild(track);
+      // Show CC button only when subtitle is linked
+      ccBtn.classList.remove('hidden-btn');
     }
     video.play().catch(()=>{});
   } catch(e) {
@@ -872,9 +885,27 @@ async function openPlayer(link, title, subtitle) {
   }
 }
 
+function toggleCC() {
+  const video = document.getElementById('mainVideo');
+  const btn = document.getElementById('ccBtn');
+  const tracks = video.textTracks;
+  if (!tracks.length) return;
+  const track = tracks[0];
+  if (track.mode === 'showing') {
+    track.mode = 'hidden';
+    btn.classList.remove('active');
+  } else {
+    track.mode = 'showing';
+    btn.classList.add('active');
+  }
+}
+
 function closePlayer() {
   const v = document.getElementById('mainVideo'); v.pause(); v.src = '';
   document.getElementById('playerOverlay').classList.remove('visible');
+  const btn = document.getElementById('ccBtn');
+  btn.classList.add('hidden-btn');
+  btn.classList.remove('active');
 }
 
 function openAddPanel() {
@@ -902,7 +933,7 @@ function openEditPanel(id) {
   document.getElementById('seriesForm').style.display = isFilm?'none':'block';
   clearForms();
   if (isFilm) {
-    ['Title','Director','Year','Country','Runtime','DOP','Synopsis','Link','Poster'].forEach(f => {
+    ['Title','Director','Year','Country','Runtime','DOP','Synopsis','Link','Subtitle','Poster'].forEach(f => {
       const el = document.getElementById('film'+f);
       if (el) el.value = item[f.toLowerCase()]||'';
     });
