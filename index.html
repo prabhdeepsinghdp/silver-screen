@@ -4,6 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Silver Screen</title>
+<meta name="description" content="Your personal cinema — no algorithms, no noise">
+<meta name="theme-color" content="#0a0a0a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="Silver Screen">
+<link rel="manifest" href="manifest.json">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/msal.js/2.38.3/msal-browser.min.js"></script>
 <style>
@@ -339,7 +345,7 @@ const msalInstance = new msal.PublicClientApplication({
   auth: {
     clientId: CLIENT_ID,
     authority: 'https://login.microsoftonline.com/consumers',
-    redirectUri: 'https://login.microsoftonline.com/common/oauth2/nativeclient'
+    redirectUri: 'https://prabhdeepsinghdp.github.io/silver-screen/'
   },
   cache: { cacheLocation: 'localStorage', storeAuthStateInCookie: true }
 });
@@ -807,6 +813,10 @@ function deleteTitle(id) {
 
 document.addEventListener('keydown', e => { if(e.key==='Escape'){closePlayer();closeAddPanel();} });
 init();
+
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("sw.js").catch(() => {});
+}
 </script>
 </body>
 </html>
