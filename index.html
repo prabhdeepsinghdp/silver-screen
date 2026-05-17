@@ -867,20 +867,41 @@ async function openPlayer(link, title, subtitle) {
     const src = data['@microsoft.graph.downloadUrl'] || link;
     video.src = src;
     if (subtitle) {
-      const track = document.createElement('track');
-      track.kind = 'subtitles';
-      track.label = 'Subtitles';
-      track.default = false;
-      track.mode = 'hidden';
-      const subEncoded = btoa(subtitle).replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_');
-      const subR = await fetch(`https://graph.microsoft.com/v1.0/shares/u!${subEncoded}/driveItem`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      const subData = await subR.json();
-      track.src = subData['@microsoft.graph.downloadUrl'] || subtitle;
-      video.appendChild(track);
-      // Show CC button only when subtitle is linked
-      ccBtn.classList.remove('hidden-btn');
+      try {
+        // Get direct download URL for subtitle
+        const subEncoded = btoa(subtitle).replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_');
+        const subR = await fetch(`https://graph.microsoft.com/v1.0/shares/u!${subEncoded}/driveItem`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const subData = await subR.json();
+        const subUrl = subData['@microsoft.graph.downloadUrl'];
+        if (subUrl) {
+          // Fetch subtitle content and convert to blob URL to bypass CORS
+          const subContent = await fetch(subUrl);
+          const subText = await subContent.text();
+          // Convert SRT to VTT if needed
+          let vttText = subText;
+          if (!subText.trim().startsWith('WEBVTT')) {
+            vttText = 'WEBVTT\n\n' + subText
+              .replace(/\r\n/g, '\n')
+              .replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2');
+          }
+          const blob = new Blob([vttText], { type: 'text/vtt' });
+          const blobUrl = URL.createObjectURL(blob);
+          const track = document.createElement('track');
+          track.kind = 'subtitles';
+          track.label = 'Subtitles';
+          track.default = false;
+          track.src = blobUrl;
+          video.appendChild(track);
+          // Show CC button
+          ccBtn.classList.remove('hidden-btn');
+          // Store blob URL for cleanup
+          video._subtitleBlob = blobUrl;
+        }
+      } catch(e) {
+        console.error('Subtitle load error:', e);
+      }
     }
     video.play().catch(()=>{});
   } catch(e) {
@@ -906,7 +927,10 @@ function toggleCC() {
 }
 
 function closePlayer() {
-  const v = document.getElementById('mainVideo'); v.pause(); v.src = '';
+  const v = document.getElementById('mainVideo');
+  v.pause(); v.src = '';
+  if (v._subtitleBlob) { URL.revokeObjectURL(v._subtitleBlob); v._subtitleBlob = null; }
+  while (v.firstChild) v.removeChild(v.firstChild);
   document.getElementById('playerOverlay').classList.remove('visible');
   const btn = document.getElementById('ccBtn');
   btn.classList.add('hidden-btn');
