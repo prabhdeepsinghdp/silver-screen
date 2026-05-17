@@ -704,35 +704,47 @@ function playEpisode(id,si,ei) {
   openPlayer(ep.link, `${item.title} · S${si+1}E${ei+1} · ${ep.title||\'\'}`, ep.subtitle);
 }
 
-function odLink(link) {
+async function odLink(link) {
   if (!link) return '';
-  // Convert any OneDrive share link to a direct streamable URL
-  // using the OneDrive Shares API with base64url encoding
-  if (link.includes('1drv.ms') || link.includes('onedrive.live.com') || link.includes('sharepoint.com')) {
-    try {
-      const encoded = btoa(link).replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_');
-      return `https://api.onedrive.com/v1.0/shares/u!${encoded}/root/content`;
-    } catch(e) { return link; }
-  }
+  if (!link.includes('1drv.ms') && !link.includes('onedrive.live.com') && !link.includes('sharepoint.com')) return link;
+
+  // Use Graph API to get a direct download URL using the share link
+  try {
+    await refreshToken();
+    const encoded = btoa(link).replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_');
+    const r = await fetch(`https://graph.microsoft.com/v1.0/shares/u!${encoded}/driveItem`, {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+    if (r.ok) {
+      const data = await r.json();
+      if (data['@microsoft.graph.downloadUrl']) return data['@microsoft.graph.downloadUrl'];
+    }
+  } catch(e) {}
+
+  // Fallback: return original link
   return link;
 }
 
-function openPlayer(link, title, subtitle) {
+async function openPlayer(link, title, subtitle) {
+  document.getElementById('playerTitleBar').textContent = title;
+  document.getElementById('playerOverlay').classList.add('visible');
   const video = document.getElementById('mainVideo');
-  video.src = odLink(link);
-  // Remove any existing tracks
+  video.src = '';
   while (video.firstChild) video.removeChild(video.firstChild);
+
+  // Resolve direct download URL via Graph API
+  const src = await odLink(link);
+  video.src = src;
+
   if (subtitle) {
     const track = document.createElement('track');
     track.kind = 'subtitles';
     track.label = 'Subtitles';
     track.default = true;
-    // For .srt we need a proxy or vtt — try direct link first
-    track.src = odLink(subtitle);
+    track.src = await odLink(subtitle);
     video.appendChild(track);
   }
-  document.getElementById('playerTitleBar').textContent = title;
-  document.getElementById('playerOverlay').classList.add('visible');
+  video.play().catch(()=>{});
 }
 
 function closePlayer() {
