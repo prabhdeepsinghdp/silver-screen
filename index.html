@@ -437,6 +437,11 @@
         <div><label class="form-label">Cinematographer / DOP</label><input class="form-input" type="text" id="seriesDOP" placeholder="DOP name"></div>
       </div>
       <div class="form-row"><label class="form-label">Synopsis</label><textarea class="form-textarea" id="seriesSynopsis" placeholder="Brief description…"></textarea></div>
+      <div class="form-row">
+        <label class="form-label">Subtitle file link (optional)</label>
+        <input class="form-input" type="text" id="seriesSubtitle" placeholder="OneDrive link to .srt or .vtt file">
+        <div class="onedrive-hint">Share the subtitle file from OneDrive and paste the link here.</div>
+      </div>
       <div class="form-row"><label class="form-label">Poster (auto-filled from TMDB)</label><input class="form-input" type="text" id="seriesPoster" placeholder="https://…"></div>
       <div class="form-row">
         <label class="form-label">Seasons &amp; Episodes</label>
@@ -938,7 +943,7 @@ function openEditPanel(id) {
       if (el) el.value = item[f.toLowerCase()]||'';
     });
   } else {
-    ['Title','Director','Year','Country','DOP','Synopsis','Poster'].forEach(f => {
+    ['Title','Director','Year','Country','DOP','Synopsis','Subtitle','Poster'].forEach(f => {
       const el = document.getElementById('series'+f);
       if (el) el.value = item[f.toLowerCase()]||'';
     });
@@ -965,7 +970,7 @@ function closeAddPanel() { document.getElementById('addPanel').classList.remove(
 
 function clearForms() {
   ['filmTitle','filmDirector','filmYear','filmCountry','filmRuntime','filmDOP','filmSynopsis','filmLink','filmSubtitle','filmPoster',
-   'seriesTitle','seriesDirector','seriesYear','seriesCountry','seriesDOP','seriesSynopsis','seriesPoster']
+   'seriesTitle','seriesDirector','seriesYear','seriesCountry','seriesDOP','seriesSynopsis','seriesSubtitle','seriesPoster']
     .forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
   document.getElementById('fetchStatus').textContent='';
   const fs2=document.getElementById('fetchStatusSeries'); if(fs2) fs2.textContent='';
@@ -1071,6 +1076,7 @@ function saveSeries() {
     country:document.getElementById('seriesCountry').value.trim(),
     dop:document.getElementById('seriesDOP').value.trim(),
     synopsis:document.getElementById('seriesSynopsis').value.trim(),
+    subtitle:document.getElementById('seriesSubtitle').value.trim(),
     poster:document.getElementById('seriesPoster').value.trim(),
     seasons:collectSeasons(),
   };
