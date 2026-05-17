@@ -978,6 +978,7 @@ function openEditPanel(id) {
           div.querySelector('[data-type="ep-title"]').value = ep.title||'';
           div.querySelector('[data-type="ep-link"]').value = ep.link||'';
           div.querySelector('[data-type="ep-dur"]').value = ep.duration||'';
+          if (ep.subtitle) { const subEl = div.querySelector('[data-type="ep-sub"]'); if(subEl) subEl.value = ep.subtitle; }
         }
       });
     });
@@ -1049,7 +1050,7 @@ function addEpToSeason(si) {
     <div style="display:flex;gap:6px;align-items:center">
       <input class="form-input" type="text" placeholder="Episode ${ei} title" data-type="ep-title" data-si="${si}" style="flex:3">
       <input class="form-input" type="text" placeholder="e.g. 52m" data-type="ep-dur" data-si="${si}" style="width:80px;flex:none">
-      <button class="ep-remove" onclick="this.parentElement.parentElement.remove()">×</button>
+      <button class="ep-remove" onclick="this.closest('.ep-entry').remove()">×</button>
     </div>
     <div style="display:flex;gap:6px">
       <input class="form-input" type="text" placeholder="Video link (OneDrive)" data-type="ep-link" data-si="${si}" style="flex:1">
