@@ -178,7 +178,7 @@
 
   .season-block { margin-bottom:12px; background:var(--bg); border:0.5px solid var(--border); border-radius:4px; padding:12px; }
   .season-block-label { font-size:11px; color:var(--amber-dim); margin-bottom:8px; }
-  .ep-entry { display:flex; gap:6px; margin-bottom:6px; align-items:center; }
+  .ep-entry { display:flex; gap:6px; margin-bottom:8px; align-items:flex-start; }
   .ep-entry .form-input { font-size:12px; padding:7px 10px; }
   .ep-remove { background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:18px; padding:0 4px; flex-shrink:0; }
   .ep-remove:hover { color:#c44; }
@@ -437,11 +437,6 @@
         <div><label class="form-label">Cinematographer / DOP</label><input class="form-input" type="text" id="seriesDOP" placeholder="DOP name"></div>
       </div>
       <div class="form-row"><label class="form-label">Synopsis</label><textarea class="form-textarea" id="seriesSynopsis" placeholder="Brief description…"></textarea></div>
-      <div class="form-row">
-        <label class="form-label">Subtitle file link (optional)</label>
-        <input class="form-input" type="text" id="seriesSubtitle" placeholder="OneDrive link to .srt or .vtt file">
-        <div class="onedrive-hint">Share the subtitle file from OneDrive and paste the link here.</div>
-      </div>
       <div class="form-row"><label class="form-label">Poster (auto-filled from TMDB)</label><input class="form-input" type="text" id="seriesPoster" placeholder="https://…"></div>
       <div class="form-row">
         <label class="form-label">Seasons &amp; Episodes</label>
@@ -967,7 +962,7 @@ function openEditPanel(id) {
       if (el) el.value = item[f.toLowerCase()]||'';
     });
   } else {
-    ['Title','Director','Year','Country','DOP','Synopsis','Subtitle','Poster'].forEach(f => {
+    ['Title','Director','Year','Country','DOP','Synopsis','Poster'].forEach(f => {
       const el = document.getElementById('series'+f);
       if (el) el.value = item[f.toLowerCase()]||'';
     });
@@ -994,7 +989,7 @@ function closeAddPanel() { document.getElementById('addPanel').classList.remove(
 
 function clearForms() {
   ['filmTitle','filmDirector','filmYear','filmCountry','filmRuntime','filmDOP','filmSynopsis','filmLink','filmSubtitle','filmPoster',
-   'seriesTitle','seriesDirector','seriesYear','seriesCountry','seriesDOP','seriesSynopsis','seriesSubtitle','seriesPoster']
+   'seriesTitle','seriesDirector','seriesYear','seriesCountry','seriesDOP','seriesSynopsis','seriesPoster']
     .forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
   document.getElementById('fetchStatus').textContent='';
   const fs2=document.getElementById('fetchStatusSeries'); if(fs2) fs2.textContent='';
@@ -1049,7 +1044,18 @@ function addSeason() {
 function addEpToSeason(si) {
   const c=document.getElementById(`episodes-${si}`); if(!c) return null;
   const ei=c.children.length+1, div=document.createElement('div'); div.className='ep-entry';
-  div.innerHTML=`<input class="form-input" type="text" placeholder="Ep ${ei} title" data-type="ep-title" data-si="${si}" style="flex:2"><input class="form-input" type="text" placeholder="Video link" data-type="ep-link" data-si="${si}" style="flex:3"><input class="form-input" type="text" placeholder="Subtitle link" data-type="ep-sub" data-si="${si}" style="flex:3"><input class="form-input" type="text" placeholder="e.g. 52m" data-type="ep-dur" data-si="${si}" style="width:70px;flex:none"><button class="ep-remove" onclick="this.parentElement.remove()">×</button>`;
+  div.innerHTML=`
+  <div style="display:flex;flex-direction:column;gap:4px;flex:1">
+    <div style="display:flex;gap:6px;align-items:center">
+      <input class="form-input" type="text" placeholder="Episode ${ei} title" data-type="ep-title" data-si="${si}" style="flex:3">
+      <input class="form-input" type="text" placeholder="e.g. 52m" data-type="ep-dur" data-si="${si}" style="width:80px;flex:none">
+      <button class="ep-remove" onclick="this.parentElement.parentElement.remove()">×</button>
+    </div>
+    <div style="display:flex;gap:6px">
+      <input class="form-input" type="text" placeholder="Video link (OneDrive)" data-type="ep-link" data-si="${si}" style="flex:1">
+      <input class="form-input" type="text" placeholder="Subtitle link (optional)" data-type="ep-sub" data-si="${si}" style="flex:1">
+    </div>
+  </div>`;
   c.appendChild(div); return div;
 }
 
@@ -1100,7 +1106,6 @@ function saveSeries() {
     country:document.getElementById('seriesCountry').value.trim(),
     dop:document.getElementById('seriesDOP').value.trim(),
     synopsis:document.getElementById('seriesSynopsis').value.trim(),
-    subtitle:document.getElementById('seriesSubtitle').value.trim(),
     poster:document.getElementById('seriesPoster').value.trim(),
     seasons:collectSeasons(),
   };
