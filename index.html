@@ -454,7 +454,7 @@
 <div class="player-overlay" id="playerOverlay">
   <button class="player-close" onclick="closePlayer()">✕</button>
   <div class="player-title-bar" id="playerTitleBar"></div>
-  <video id="mainVideo" controls autoplay></video>
+  <video id="mainVideo" controls autoplay playsinline webkit-playsinline></video>
   <button class="player-cc-btn hidden-btn" id="ccBtn" onclick="toggleCC()">CC</button>
 </div>
 
@@ -821,7 +821,7 @@ async function playEpisode(id,si,ei) {
   const item = db.series.find(i=>i.id===id);
   const ep = item?.seasons?.[si]?.episodes?.[ei];
   if (!ep?.link) { alert('No video link added yet.'); return; }
-  await openPlayer(ep.link, item.title + ' · S' + (si+1) + 'E' + (ei+1) + ' · ' + (ep.title||''), ep.subtitle);
+  await openPlayer(ep.link, item.title + ' · S' + (si+1) + 'E' + (ei+1) + ' · ' + (ep.title||''), ep.subtitle||'');
 }
 
 async function odLink(link) {
@@ -845,13 +845,37 @@ async function openPlayer(link, title, subtitle) {
   document.getElementById('playerTitleBar').textContent = title;
   document.getElementById('playerOverlay').classList.add('visible');
   const video = document.getElementById('mainVideo');
-  video.src = '';
   while (video.firstChild) video.removeChild(video.firstChild);
-
   const ccBtn = document.getElementById('ccBtn');
   ccBtn.classList.add('hidden-btn');
   ccBtn.classList.remove('active');
 
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+
+  // On iOS: set src immediately from share link to preserve user gesture,
+  // then swap to direct URL once resolved
+  if (isIOS) {
+    video.src = link;
+    video.load();
+    // Resolve real URL in background and swap src
+    try {
+      const token = localStorage.getItem('ss_token');
+      const encoded = btoa(link).replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_');
+      const r = await fetch(`https://graph.microsoft.com/v1.0/shares/u!${encoded}/driveItem`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await r.json();
+      if (data['@microsoft.graph.downloadUrl']) {
+        const currentTime = video.currentTime;
+        video.src = data['@microsoft.graph.downloadUrl'];
+        video.currentTime = currentTime;
+        video.load();
+      }
+    } catch(e) { console.error('iOS src swap error:', e); }
+    return;
+  }
+
+  // Desktop / Android — full async flow
   try {
     const token = localStorage.getItem('ss_token');
     const encoded = btoa(link).replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_');
@@ -861,9 +885,8 @@ async function openPlayer(link, title, subtitle) {
     const data = await r.json();
     const src = data['@microsoft.graph.downloadUrl'] || link;
     video.src = src;
-    if (subtitle) {
+    if (subtitle && subtitle.trim()) {
       try {
-        // Get direct download URL for subtitle
         const subEncoded = btoa(subtitle).replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_');
         const subR = await fetch(`https://graph.microsoft.com/v1.0/shares/u!${subEncoded}/driveItem`, {
           headers: { Authorization: `Bearer ${token}` }
@@ -871,10 +894,8 @@ async function openPlayer(link, title, subtitle) {
         const subData = await subR.json();
         const subUrl = subData['@microsoft.graph.downloadUrl'];
         if (subUrl) {
-          // Fetch subtitle content and convert to blob URL to bypass CORS
           const subContent = await fetch(subUrl);
           const subText = await subContent.text();
-          // Convert SRT to VTT if needed
           let vttText = subText;
           if (!subText.trim().startsWith('WEBVTT')) {
             vttText = 'WEBVTT\n\n' + subText
@@ -889,14 +910,10 @@ async function openPlayer(link, title, subtitle) {
           track.default = false;
           track.src = blobUrl;
           video.appendChild(track);
-          // Show CC button
           ccBtn.classList.remove('hidden-btn');
-          // Store blob URL for cleanup
           video._subtitleBlob = blobUrl;
         }
-      } catch(e) {
-        console.error('Subtitle load error:', e);
-      }
+      } catch(e) { console.error('Subtitle load error:', e); }
     }
     video.play().catch(()=>{});
   } catch(e) {
