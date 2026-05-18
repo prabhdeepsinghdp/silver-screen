@@ -146,6 +146,8 @@
   .player-close { position:absolute; top:20px; right:24px; background:none; border:none; color:#888; font-size:28px; cursor:pointer; transition:color 0.2s; }
   .player-close:hover { color:#fff; }
   .player-title-bar { position:absolute; top:20px; left:24px; font-family:var(--font-display); font-style:italic; font-size:16px; color:#666; }
+  .player-loading { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); color:#666; font-family:var(--font-display); font-style:italic; font-size:16px; letter-spacing:0.06em; display:none; }
+  .player-loading.visible { display:block; }
   .player-cc-btn { position:absolute; bottom:72px; right:24px; background:none; border:1.5px solid #555; border-radius:4px; color:#888; font-family:var(--font-body); font-size:11px; font-weight:500; letter-spacing:0.08em; padding:5px 10px; cursor:pointer; transition:all 0.2s; }
   .player-cc-btn.active { border-color:var(--amber); color:var(--amber); }
   .player-cc-btn:hover { border-color:#aaa; color:#fff; }
@@ -454,7 +456,8 @@
 <div class="player-overlay" id="playerOverlay">
   <button class="player-close" onclick="closePlayer()">✕</button>
   <div class="player-title-bar" id="playerTitleBar"></div>
-  <video id="mainVideo" controls autoplay playsinline webkit-playsinline></video>
+  <div class="player-loading" id="playerLoading">Loading…</div>
+  <video id="mainVideo" controls playsinline webkit-playsinline style="display:none"></video>
   <button class="player-cc-btn hidden-btn" id="ccBtn" onclick="toggleCC()">CC</button>
 </div>
 
@@ -852,30 +855,10 @@ async function openPlayer(link, title, subtitle) {
 
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
 
-  // On iOS: set src immediately from share link to preserve user gesture,
-  // then swap to direct URL once resolved
-  if (isIOS) {
-    video.src = link;
-    video.load();
-    // Resolve real URL in background and swap src
-    try {
-      const token = localStorage.getItem('ss_token');
-      const encoded = btoa(link).replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_');
-      const r = await fetch(`https://graph.microsoft.com/v1.0/shares/u!${encoded}/driveItem`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      const data = await r.json();
-      if (data['@microsoft.graph.downloadUrl']) {
-        const currentTime = video.currentTime;
-        video.src = data['@microsoft.graph.downloadUrl'];
-        video.currentTime = currentTime;
-        video.load();
-      }
-    } catch(e) { console.error('iOS src swap error:', e); }
-    return;
-  }
+  // Show loading indicator while resolving URL
+  document.getElementById('playerLoading').classList.add('visible');
+  video.style.display = 'none';
 
-  // Desktop / Android — full async flow
   try {
     const token = localStorage.getItem('ss_token');
     const encoded = btoa(link).replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_');
@@ -884,6 +867,10 @@ async function openPlayer(link, title, subtitle) {
     });
     const data = await r.json();
     const src = data['@microsoft.graph.downloadUrl'] || link;
+
+    // Show video, hide loading
+    document.getElementById('playerLoading').classList.remove('visible');
+    video.style.display = 'block';
     video.src = src;
     if (subtitle && subtitle.trim()) {
       try {
@@ -915,11 +902,13 @@ async function openPlayer(link, title, subtitle) {
         }
       } catch(e) { console.error('Subtitle load error:', e); }
     }
-    video.play().catch(()=>{});
+    if (!isIOS) video.play().catch(()=>{});
   } catch(e) {
     console.error('Player error:', e);
+    document.getElementById('playerLoading').classList.remove('visible');
+    video.style.display = 'block';
     video.src = link;
-    video.play().catch(()=>{});
+    if (!isIOS) video.play().catch(()=>{});
   }
 }
 
@@ -941,6 +930,8 @@ function toggleCC() {
 function closePlayer() {
   const v = document.getElementById('mainVideo');
   v.pause(); v.src = '';
+  v.style.display = 'none';
+  document.getElementById('playerLoading').classList.remove('visible');
   if (v._subtitleBlob) { URL.revokeObjectURL(v._subtitleBlob); v._subtitleBlob = null; }
   while (v.firstChild) v.removeChild(v.firstChild);
   document.getElementById('playerOverlay').classList.remove('visible');
