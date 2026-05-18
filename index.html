@@ -872,27 +872,60 @@ async function openPlayer(link, title, subtitle) {
     loading.classList.remove('visible');
 
     if (isIOS) {
-      // On iOS: use OneDrive's own embed player via iframe
-      // This bypasses the CDN streaming restriction entirely
-      const embedUrl = link.replace('1drv.ms/v/', '1drv.ms/v/').replace('1drv.ms/u/', '1drv.ms/u/');
-      // Convert share link to embed format
-      const iframeUrl = 'https://onedrive.live.com/embed?resid=' + encodeURIComponent(link);
+      // Load subtitles first before showing tap button
+      let subtitleBlobUrl = null;
+      if (subtitle && subtitle.trim()) {
+        try {
+          const subEncoded = btoa(subtitle).replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_');
+          const subR = await fetch(`https://graph.microsoft.com/v1.0/shares/u!${subEncoded}/driveItem`, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          const subData = await subR.json();
+          const subUrl = subData['@microsoft.graph.downloadUrl'];
+          if (subUrl) {
+            const subContent = await fetch(subUrl);
+            const subText = await subContent.text();
+            let vttText = subText;
+            if (!subText.trim().startsWith('WEBVTT')) {
+              vttText = 'WEBVTT\n\n' + subText
+                .replace(/\r\n/g, '\n')
+                .replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2');
+            }
+            const blob = new Blob([vttText], { type: 'text/vtt' });
+            subtitleBlobUrl = URL.createObjectURL(blob);
+          }
+        } catch(e) { console.error('Subtitle load error:', e); }
+      }
+
       const tapDiv = document.createElement('div');
       tapDiv.id = 'iosTapPlay';
       tapDiv.style.cssText = 'position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;gap:16px;';
       tapDiv.innerHTML = `
-        <div style="width:72px;height:72px;border-radius:50%;background:var(--amber);display:flex;align-items:center;justify-content:center;font-size:28px;color:#0a0a0a;padding-left:6px;">▶</div>
-        <div style="font-family:var(--font-display);font-style:italic;font-size:14px;color:#666;letter-spacing:0.06em;">Tap to play</div>`;
+        <div style="display:flex;flex-direction:column;align-items:center;gap:20px;">
+          <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="32" cy="32" r="31" stroke="#c8973a" stroke-width="1"/>
+            <polygon points="26,20 26,44 46,32" fill="#c8973a"/>
+          </svg>
+          <div style="font-family:'Cormorant Garamond',Georgia,serif;font-style:italic;font-size:13px;color:#555;letter-spacing:0.1em;">Tap to Play</div>
+        </div>`;
       tapDiv.onclick = () => {
         tapDiv.remove();
         video.style.display = 'block';
-        // Try direct URL first, fall back to original share link
         video.src = src;
         video.load();
+        if (subtitleBlobUrl) {
+          const track = document.createElement('track');
+          track.kind = 'subtitles';
+          track.label = 'Subtitles';
+          track.default = false;
+          track.src = subtitleBlobUrl;
+          video.appendChild(track);
+          ccBtn.classList.remove('hidden-btn');
+          video._subtitleBlob = subtitleBlobUrl;
+        }
         const playPromise = video.play();
         if (playPromise) {
           playPromise.catch(() => {
-            // Direct URL failed — try original share link
             video.src = link;
             video.load();
             video.play().catch(()=>{});
