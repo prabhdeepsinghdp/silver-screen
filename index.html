@@ -457,6 +457,7 @@
   <button class="player-close" onclick="closePlayer()">✕</button>
   <div class="player-title-bar" id="playerTitleBar"></div>
   <div class="player-loading" id="playerLoading">Loading…</div>
+  <div id="playerDebug" style="display:none;position:absolute;bottom:80px;left:16px;right:16px;background:#111;border:0.5px solid #333;border-radius:4px;padding:12px;font-size:11px;color:#888;font-family:monospace;word-break:break-all;max-height:200px;overflow-y:auto;"></div>
   <video id="mainVideo" controls playsinline webkit-playsinline style="display:none"></video>
   <button class="player-cc-btn hidden-btn" id="ccBtn" onclick="toggleCC()">CC</button>
 </div>
@@ -860,13 +861,20 @@ async function openPlayer(link, title, subtitle) {
   ccBtn.classList.add('hidden-btn');
   ccBtn.classList.remove('active');
 
+  const dbg = document.getElementById('playerDebug');
+  const log = (msg) => { if(dbg){dbg.style.display='block'; dbg.innerHTML += msg + '<br>';} };
+
   try {
     const token = localStorage.getItem('ss_token');
+    log('Token: ' + (token ? token.substring(0,30)+'...' : 'MISSING'));
     const encoded = btoa(link).replace(/=/g,'').replace(/\+/g,'-').replace(/\//g,'_');
     const r = await fetch(`https://graph.microsoft.com/v1.0/shares/u!${encoded}/driveItem`, {
       headers: { Authorization: `Bearer ${token}` }
     });
+    log('Graph API status: ' + r.status);
     const data = await r.json();
+    const hasUrl = !!data['@microsoft.graph.downloadUrl'];
+    log('Download URL: ' + (hasUrl ? 'OK' : 'MISSING') + (data.error ? ' Error: ' + data.error.code : ''));
     const src = data['@microsoft.graph.downloadUrl'] || link;
 
     loading.classList.remove('visible');
@@ -958,6 +966,8 @@ function closePlayer() {
   document.getElementById('playerLoading').classList.remove('visible');
   const tapDiv = document.getElementById('iosTapPlay');
   if (tapDiv) tapDiv.remove();
+  const dbg = document.getElementById('playerDebug');
+  if (dbg) { dbg.style.display='none'; dbg.innerHTML=''; }
   if (v._subtitleBlob) { URL.revokeObjectURL(v._subtitleBlob); v._subtitleBlob = null; }
   while (v.firstChild) v.removeChild(v.firstChild);
   document.getElementById('playerOverlay').classList.remove('visible');
