@@ -868,6 +868,14 @@ async function openPlayer(link, title, subtitle) {
     const data = await r.json();
     const src = data['@microsoft.graph.downloadUrl'] || link;
 
+    // On iOS — open directly in native player (new tab)
+    if (isIOS) {
+      document.getElementById('playerLoading').classList.remove('visible');
+      document.getElementById('playerOverlay').classList.remove('visible');
+      window.open(src, '_blank');
+      return;
+    }
+
     // Show video, hide loading
     document.getElementById('playerLoading').classList.remove('visible');
     video.style.display = 'block';
