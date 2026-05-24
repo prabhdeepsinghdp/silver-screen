@@ -330,6 +330,7 @@
   <div class="nav-center">
     <button class="tab-btn active" id="tabFilms" onclick="switchTab('films')">Films</button>
     <button class="tab-btn" id="tabSeries" onclick="switchTab('series')">Series</button>
+    <button class="tab-btn" id="tabDocs" onclick="switchTab('docs')">Docs</button>
   </div>
   <div class="nav-right">
     <span class="filter-label">Sort</span>
@@ -349,7 +350,7 @@
 
 <div class="mobile-search" id="mobileSearch" style="display:none">
   <input type="text" placeholder="Search…" oninput="document.getElementById('searchInput').value=this.value;renderLibrary()">
-  <select onchange="document.getElementById('sortSelect').value=this.value;renderLibrary()">
+  <select id='mobileSortSelect' onchange="document.getElementById('sortSelect').value=this.value;renderLibrary()">
     <option value="title">A–Z</option>
     <option value="year">Year</option>
     <option value="director">Director</option>
@@ -476,7 +477,7 @@ const TOKEN_URL = 'https://login.microsoftonline.com/consumers/oauth2/v2.0/token
 
 let apiKey = '', currentTab = 'films', selectedId = null;
 let editingId = null, editingSeasonCount = 0;
-let db = { films: [], series: [] };
+let db = { films: [], series: [], docs: [] };
 let accessToken = null, tokenExpiry = 0, syncTimer = null;
 
 // ── TOKEN STORAGE ──
@@ -648,7 +649,8 @@ async function loadFromOneDrive() {
     if (r.status === 404) { db = { films: [], series: [] }; setSyncStatus('synced', 'New library — ready'); return; }
     if (!r.ok) throw new Error(r.status);
     db = await r.json();
-    setSyncStatus('synced', `Loaded · ${db.films.length} films, ${db.series.length} series`);
+    if (!db.docs) db.docs = [];
+    setSyncStatus('synced', `Loaded · ${db.films.length} films, ${db.series.length} series, ${(db.docs||[]).length} docs`);
   } catch(e) {
     setSyncStatus('error', 'Could not load library');
     db = { films: [], series: [] };
@@ -688,6 +690,7 @@ function switchTab(tab) {
   currentTab = tab; selectedId = null;
   document.getElementById('tabFilms').classList.toggle('active', tab === 'films');
   document.getElementById('tabSeries').classList.toggle('active', tab === 'series');
+  document.getElementById('tabDocs').classList.toggle('active', tab === 'docs');
   document.getElementById('detailEmpty').style.display = 'flex';
   document.getElementById('detailContent').style.display = 'none';
   renderLibrary();
@@ -696,7 +699,7 @@ function switchTab(tab) {
 function getItems() {
   const sort = document.getElementById('sortSelect').value;
   const q = document.getElementById('searchInput').value.toLowerCase();
-  let items = [...(currentTab === 'films' ? db.films : db.series)];
+  let items = [...(currentTab === 'films' ? db.films : currentTab === 'series' ? db.series : db.docs)];
   if (q) items = items.filter(i =>
     [i.title, i.director, i.country, i.dop].some(f => (f||'').toLowerCase().includes(q))
   );
@@ -710,7 +713,7 @@ function getItems() {
 
 function renderLibrary() {
   const { items, sort } = getItems();
-  document.getElementById('libraryTitle').textContent = currentTab === 'films' ? 'Films' : 'Series';
+  document.getElementById('libraryTitle').textContent = currentTab === 'films' ? 'Films' : currentTab === 'series' ? 'Series' : 'Documentaries';
   document.getElementById('libraryCount').textContent = `${items.length} title${items.length!==1?'s':''}`;
   const container = document.getElementById('gridContainer');
   const grouped = ['director','country','dop'].includes(sort);
@@ -764,9 +767,9 @@ function esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').repl
 
 function selectTitle(id) {
   selectedId = id; renderLibrary(); showMobileDetail();
-  const item = [...db.films,...db.series].find(i=>i.id===id);
+  const item = [...db.films,...db.series,...db.docs].find(i=>i.id===id);
   if (!item) return;
-  const isFilm = db.films.some(i=>i.id===id);
+  const isFilm = db.films.some(i=>i.id===id) || db.docs.some(i=>i.id===id);
   document.getElementById('detailEmpty').style.display = 'none';
   document.getElementById('detailContent').style.display = 'block';
 
@@ -815,7 +818,7 @@ function renderEpList(item) {
 }
 
 async function playFilm(id) {
-  const item = db.films.find(i=>i.id===id);
+  const item = [...db.films, ...db.docs].find(i=>i.id===id);
   if (!item?.link) { alert('No video link added yet.'); return; }
   await openPlayer(item.link, item.title, item.subtitle);
 }
@@ -1012,8 +1015,8 @@ function closePlayer() {
 
 function openAddPanel() {
   editingId = null; editingSeasonCount = 0;
-  const isFilms = currentTab === 'films';
-  document.getElementById('addPanelTitle').textContent = isFilms ? 'Add a film' : 'Add a series';
+  const isFilms = currentTab === 'films' || currentTab === 'docs';
+  document.getElementById('addPanelTitle').textContent = currentTab === 'films' ? 'Add a film' : currentTab === 'docs' ? 'Add a documentary' : 'Add a series';
   document.getElementById('addPanelSub').textContent = isFilms
     ? 'Type the title and fetch details from TMDB, then add your OneDrive link.'
     : 'Type the title and fetch details, then add seasons and episodes.';
@@ -1025,9 +1028,9 @@ function openAddPanel() {
 }
 
 function openEditPanel(id) {
-  const item = [...db.films,...db.series].find(i=>i.id===id);
+  const item = [...db.films,...db.series,...db.docs].find(i=>i.id===id);
   if (!item) return;
-  const isFilm = db.films.some(i=>i.id===id);
+  const isFilm = db.films.some(i=>i.id===id) || db.docs.some(i=>i.id===id);
   editingId = id; editingSeasonCount = 0;
   document.getElementById('addPanelTitle').textContent = isFilm ? 'Edit film' : 'Edit series';
   document.getElementById('addPanelSub').textContent = 'Update details and save.';
@@ -1155,7 +1158,7 @@ function collectSeasons() {
   return seasons;
 }
 
-function saveTitle() { currentTab==='films'?saveFilm():saveSeries(); }
+function saveTitle() { (currentTab==='films'||currentTab==='docs')?saveFilm():saveSeries(); }
 
 function saveFilm() {
   const title=document.getElementById('filmTitle').value.trim(); if(!title){alert('Please enter a title.');return;}
@@ -1171,8 +1174,9 @@ function saveFilm() {
     subtitle:document.getElementById('filmSubtitle').value.trim(),
     poster:document.getElementById('filmPoster').value.trim(),
   };
-  if(editingId){const i=db.films.findIndex(f=>f.id===editingId);if(i!==-1)db.films[i]=film;}
-  else db.films.push(film);
+  const filmArr = currentTab === 'docs' ? db.docs : db.films;
+  if(editingId){const i=filmArr.findIndex(f=>f.id===editingId);if(i!==-1)filmArr[i]=film;}
+  else filmArr.push(film);
   closeAddPanel(); renderLibrary(); selectTitle(film.id); debounceSave();
 }
 
